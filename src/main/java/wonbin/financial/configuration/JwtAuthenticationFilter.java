@@ -1,5 +1,9 @@
 package wonbin.financial.configuration;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -34,14 +38,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         }
-        if(token!=null) {
+        if (token != null) {
             try {
-                String userId = jwtTokenBuilder.getUserId(token);
-                UsernamePasswordAuthenticationToken authenticationToken =
-                        new UsernamePasswordAuthenticationToken(userId,null, Collections.emptyList());
-                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-                log.info("로그인한 사람 : {}",authenticationToken);
-            } catch (Exception e) {
+                Jws<Claims> claims = jwtTokenBuilder.validateAndParseToken(token);
+                String userId = claims.getPayload().getSubject();
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                null,
+                                Collections.emptyList()
+                        );
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (ExpiredJwtException e) {
+                // accessToken 만료 → 그냥 넘어감 (reissue에서 처리)
+                SecurityContextHolder.clearContext();
+            } catch (JwtException e) {
+                // 위조 토큰
                 SecurityContextHolder.clearContext();
             }
         }
