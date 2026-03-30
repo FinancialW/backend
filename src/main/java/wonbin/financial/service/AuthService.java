@@ -9,7 +9,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import wonbin.financial.constant.JwtExpiration;
 import wonbin.financial.dto.AuthResultDto;
@@ -66,14 +68,13 @@ public class AuthService {
 
     public String extractRefreshToken(HttpServletRequest request) {
         if(request.getCookies() == null) {
-            throw new RuntimeException("쿠기 없음");
+            return null;
         }
         return Arrays.stream(request.getCookies())
                 .filter(c -> c.getName().equals("refreshToken"))
                 .findFirst()
                 .map(Cookie::getValue)
-                .orElseThrow(() ->
-                        new ResponseStatusException(HttpStatus.UNAUTHORIZED, "refreshToken이 존재하지 않습니다."));
+                .orElse(null);
     }
 
     public AuthResultDto reissue(String refreshToken) {
@@ -102,4 +103,18 @@ public class AuthService {
         return new AuthResultDto(newAccessToken, newRefreshToken);
     }
 
-}
+    @Transactional
+    public void kakaoLogout() {
+        String kakaoId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Member member = kakaoMemberRepository.findByKakaoId(kakaoId)
+                .orElseThrow(() -> new RuntimeException("존재하지 않는 회원입니다."));
+        member.setRefreshToken(null);
+    }
+    public void expireCookie(HttpServletResponse response, String name) {
+        Cookie cookie = new Cookie(name, null);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        response.addCookie(cookie);
+    }
+    }

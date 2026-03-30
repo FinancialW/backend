@@ -10,9 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import wonbin.financial.dto.AuthResultDto;
 import wonbin.financial.dto.MemberDto;
 import wonbin.financial.entity.Member;
@@ -26,12 +26,16 @@ public class OAuthController {
     @Value("${kakao.client.id}")
     private String kakaoClientId;
     @GetMapping("/auth/me")
-    public MemberDto me(Authentication authentication) {
-        if (authentication == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "인증되지 않은 사용자");
+    public ResponseEntity<MemberDto> me(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Member byKakaoId = authService.findByKakaoId(authentication.getName());
-        return new MemberDto(byKakaoId.getMemberName(), byKakaoId.getId());
+        try {
+            Member byKakaoId = authService.findByKakaoId(authentication.getName());
+            return ResponseEntity.ok(new MemberDto(byKakaoId.getMemberName(), byKakaoId.getId()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
 
     @GetMapping("/auth/reissue")
@@ -46,7 +50,7 @@ public class OAuthController {
     public void redirectToKakao(HttpServletResponse response) throws IOException {
         String url = "https://kauth.kakao.com/oauth/authorize"
                 + "?client_id="+kakaoClientId
-                + "&redirect_uri=http://localhost:8080/auth/kakao/callback"
+                + "&redirect_uri=http://192.168.0.33:8080/auth/kakao/callback"
                 + "&response_type=code";
 
         response.sendRedirect(url);
@@ -56,6 +60,19 @@ public class OAuthController {
                          HttpServletResponse response) throws IOException {
         AuthResultDto result = authService.kakaoLogin(code);
         authService.addCookies(response,result);
-        response.sendRedirect("http://localhost:5173/");
+        response.sendRedirect("http://192.168.0.33:5173/login-success");
+    }
+
+    @PostMapping("/auth/logout")
+    public ResponseEntity<Void> logout(HttpServletResponse response) {
+        try {
+            authService.kakaoLogout();
+        } catch (Exception e) {
+            System.out.println("로그아웃 로직 예외 무시: " + e.getMessage());
+        } finally {
+            authService.expireCookie(response, "accessToken");
+            authService.expireCookie(response, "refreshToken");
+        }
+        return ResponseEntity.ok().build();
     }
 }
