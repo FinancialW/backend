@@ -28,6 +28,7 @@ public class AuthService {
 
     public void saveRefreshToken(Member member, String refreshToken) {
         member.setRefreshToken(refreshToken);
+        kakaoMemberRepository.save(member);
     }
 
     public Member findByKakaoId(String kakaoId) {
@@ -36,8 +37,8 @@ public class AuthService {
     }
 
 
-    public AuthResultDto kakaoLogin(String code, String state) {
-        TokenDto kakaoToken = kakaoTokenService.getAccessToken(code, state);
+    public AuthResultDto kakaoLogin(String code) {
+        TokenDto kakaoToken = kakaoTokenService.getAccessToken(code);
         KakaoUserDto userInfo =
                 kakaoTokenService.getUserInfo(kakaoToken.getAccess_token());
         Member member = kakaoLoginService.loginService(userInfo);
