@@ -26,7 +26,7 @@ public class SecurityConfigFilter {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**", "/login", "/error").permitAll()
+                        .requestMatchers("/auth/**", "/login", "/error","/test/token").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exception -> exception

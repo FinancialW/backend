@@ -29,12 +29,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
-        Cookie[] cookies = request.getCookies();
+
         String token = null;
-        if(cookies!=null) {
-            for(Cookie cookie : cookies) {
-                if("accessToken".equals(cookie.getName())) {
-                    token = cookie.getValue();
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            token = header.substring(7);
+        }
+        if (token == null) {
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (Cookie cookie : cookies) {
+                    if ("accessToken".equals(cookie.getName())) {
+                        token = cookie.getValue();
+                    }
                 }
             }
         }
