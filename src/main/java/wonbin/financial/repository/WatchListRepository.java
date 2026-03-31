@@ -8,4 +8,5 @@ import wonbin.financial.entity.WatchList;
 @Repository
 public interface WatchListRepository extends JpaRepository<WatchList,Long> {
     List<WatchList> findByUserId(String userId);
+    boolean existsByUserIdAndSymbol(String userId, String symbol);
 }
