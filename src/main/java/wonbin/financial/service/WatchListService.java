@@ -27,4 +27,12 @@ public class WatchListService {
         WatchList watchList = new WatchList(member.getKakaoId(), symbol);
         watchListRepository.save(watchList);
     }
+
+    public void deleteMemberWatchlist(Member member, String symbol) {
+        WatchList watchList = watchListRepository
+                .findByUserIdAndSymbol(member.getKakaoId(), symbol)
+                .orElseThrow(() -> new IllegalStateException("존재 하지 않는 종목"));
+        watchListRepository.delete(watchList);
+    }
+
 }

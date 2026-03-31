@@ -4,6 +4,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,6 +33,21 @@ public class WatchListController {
         try {
             Member byKakaoId = authService.findByKakaoId(authentication.getName());
             watchListService.saveMemberLike(byKakaoId,symbol);
+            return ResponseEntity.ok().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/watchlist/dislike")
+    public ResponseEntity<?> dislikeWatchlist(Authentication authentication,
+                                              @RequestParam(required = false,name="symbol") String symbol) {
+        if(symbol==null || symbol.isBlank()) {
+            return ResponseEntity.badRequest().body("symbol이 비어있습니다");
+        }
+        try {
+            Member byKakaoId = authService.findByKakaoId(authentication.getName());
+            watchListService.deleteMemberWatchlist(byKakaoId,symbol);
             return ResponseEntity.ok().build();
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(e.getMessage());

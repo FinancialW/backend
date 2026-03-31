@@ -83,6 +83,6 @@ public class OAuthController {
 
     @GetMapping("/test/token")
     public String testToken() {
-        return jwtTokenBuilder.tokenCreator(testId, JwtExpiration.ACCESS_TOKEN_MS.getMilliseconds());
+        return jwtTokenBuilder.tokenCreator(testId, JwtExpiration.REFRESH_TOKEN_DAYS.getMilliseconds());
     }
 }
