@@ -24,7 +24,7 @@ public class WatchListController {
         return watchListService.getUserWatchListSymbols(byKakaoId.getKakaoId());
     }
 
-    @PostMapping("/watchlist/like")
+    @PostMapping("/watchlist")
     public ResponseEntity<?> likeWatchlist(Authentication authentication,
                                               @RequestParam(required = false, name="symbol") String symbol) {
         if(symbol==null || symbol.isBlank()) {
@@ -39,7 +39,7 @@ public class WatchListController {
         }
     }
 
-    @DeleteMapping("/watchlist/dislike")
+    @DeleteMapping("/watchlist")
     public ResponseEntity<?> dislikeWatchlist(Authentication authentication,
                                               @RequestParam(required = false,name="symbol") String symbol) {
         if(symbol==null || symbol.isBlank()) {

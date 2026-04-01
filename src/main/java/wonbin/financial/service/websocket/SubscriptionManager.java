@@ -94,4 +94,39 @@ public class SubscriptionManager {
             subscribedSymbols.remove(symbol);
         }
     }
+
+    public void addSymbol(String sessionId, String symbol) {
+        userWatchlist.computeIfAbsent(sessionId, k-> ConcurrentHashMap.newKeySet()).add(symbol);
+        symbolRefCount.compute(symbol,(key,count) -> {
+            if(count==null || count==0) {
+                try {
+                    subscribeInternal(symbol);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return 1;
+            }
+            return count+1;
+        });
+    }
+
+    public void removeSymbol(String sessionId, String symbol) {
+        Set<String> symbols = userWatchlist.get(sessionId);
+        if(symbols!=null) {
+            symbols.remove(symbol);
+        }
+        symbolRefCount.compute(symbol,(key,count) -> {
+            if(count==null) return null;
+            int newCount = count-1;
+            if(newCount<=0 && !defaultSymbols.contains(symbol)) {
+                try {
+                    unsubscribeInternal(symbol);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+            return newCount;
+        });
+    }
 }
