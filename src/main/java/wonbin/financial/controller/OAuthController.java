@@ -13,18 +13,24 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import wonbin.financial.constant.JwtExpiration;
 import wonbin.financial.dto.AuthResultDto;
 import wonbin.financial.dto.MemberDto;
 import wonbin.financial.entity.Member;
 import wonbin.financial.service.AuthService;
+import wonbin.financial.service.JwtTokenBuilder;
 
 @RestController
 @Slf4j
 @RequiredArgsConstructor
 public class OAuthController {
     private final AuthService authService;
+    private final JwtTokenBuilder jwtTokenBuilder;
     @Value("${kakao.client.id}")
     private String kakaoClientId;
+    @Value("${jwt.test.id}")
+    private String testId;
     @GetMapping("/auth/me")
     public ResponseEntity<MemberDto> me(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
@@ -38,9 +44,12 @@ public class OAuthController {
         }
     }
 
-    @GetMapping("/auth/reissue")
+    @GetMapping("/auth/reissue") // Cookie가 없는 경우 예외 상황 해결해야됨
     public ResponseEntity<AuthResultDto> reissue(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = authService.extractRefreshToken(request);
+        if(refreshToken==null || refreshToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"RefreshToken 없음");
+        }
         AuthResultDto resultDto = authService.reissue(refreshToken);
         authService.addCookies(response,resultDto);
         return ResponseEntity.ok(resultDto);
@@ -74,5 +83,10 @@ public class OAuthController {
             authService.expireCookie(response, "refreshToken");
         }
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/test/token")
+    public String testToken() {
+        return jwtTokenBuilder.tokenCreator(testId, JwtExpiration.REFRESH_TOKEN_DAYS.getMilliseconds());
     }
 }
