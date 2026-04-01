@@ -3,7 +3,7 @@ package wonbin.financial.service.oauth;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import wonbin.financial.dto.KakaoUserDto;
+import wonbin.financial.dto.oauth.KakaoUserDto;
 import wonbin.financial.entity.Member;
 import wonbin.financial.repository.KakaoMemberRepository;
 

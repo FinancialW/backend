@@ -83,12 +83,10 @@ public class ClientWebSocketHandler extends TextWebSocketHandler {
 
         if (sessions != null && !sessions.isEmpty()) {
             String payload = String.format(
-                    "{\"type\":\"trade\",\"data\":[{\"s\":\"%s\",\"p\":%s}]}",
+                    "{\"type\":\"PRICE\",\"symbol\":\"%s\",\"price\":%s}",
                     symbol, event.getPrice()
             );
-
             TextMessage textMessage = new TextMessage(payload);
-
             for (WebSocketSession session : sessions) {
                 if (session.isOpen()) {
                     try {

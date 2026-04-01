@@ -1,4 +1,4 @@
-package wonbin.financial.dto;
+package wonbin.financial.dto.finnhubDto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;

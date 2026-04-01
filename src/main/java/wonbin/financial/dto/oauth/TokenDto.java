@@ -1,4 +1,4 @@
-package wonbin.financial.dto;
+package wonbin.financial.dto.oauth;
 
 import lombok.Data;
 

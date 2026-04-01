@@ -12,8 +12,8 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.ObjectMapper;
-import wonbin.financial.dto.FinnhubResponseDto;
-import wonbin.financial.dto.FinnhubResponseDto.TradeData;
+import wonbin.financial.dto.finnhubDto.FinnhubResponseDto;
+import wonbin.financial.dto.finnhubDto.FinnhubResponseDto.TradeData;
 import wonbin.financial.event.FinnhubConnectedEvent;
 import wonbin.financial.event.PriceUpdateEvent;
 
@@ -24,8 +24,8 @@ public class FinnhubWebSocketClient {
 
     private final ApplicationEventPublisher eventPublisher; // 이벤트 발행기
     private final ObjectMapper objectMapper;
-    @Value("${FINHUB_URL}")
-    private String FINNHUB_URL;
+    @Value("${FINNHUB_WS_URL}")
+    private String FINNHUB_WS_URL;
     private WebSocketSession webSocketSession; // 외부에서 메시지를 보낼 수 있는 세션 저장
 
     @PostConstruct
@@ -68,7 +68,7 @@ public class FinnhubWebSocketClient {
                 public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
                     log.info("연결 종료");
                 }
-            }, FINNHUB_URL);
+            }, FINNHUB_WS_URL);
 
         } catch (Exception e) {
             e.printStackTrace();
