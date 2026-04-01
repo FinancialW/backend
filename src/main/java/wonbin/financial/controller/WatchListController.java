@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import wonbin.financial.entity.Member;
-import wonbin.financial.service.AuthService;
-import wonbin.financial.service.WatchListService;
+import wonbin.financial.service.oauth.AuthService;
+import wonbin.financial.service.oauth.WatchListService;
 
 @RestController
 @RequiredArgsConstructor

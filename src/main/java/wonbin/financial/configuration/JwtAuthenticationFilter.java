@@ -17,7 +17,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import wonbin.financial.service.JwtTokenBuilder;
+import wonbin.financial.service.oauth.JwtTokenBuilder;
 
 @RequiredArgsConstructor
 @Slf4j

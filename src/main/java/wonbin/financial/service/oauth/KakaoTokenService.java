@@ -1,4 +1,4 @@
-package wonbin.financial.service;
+package wonbin.financial.service.oauth;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

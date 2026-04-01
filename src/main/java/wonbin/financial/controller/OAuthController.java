@@ -18,8 +18,8 @@ import wonbin.financial.constant.JwtExpiration;
 import wonbin.financial.dto.AuthResultDto;
 import wonbin.financial.dto.MemberDto;
 import wonbin.financial.entity.Member;
-import wonbin.financial.service.AuthService;
-import wonbin.financial.service.JwtTokenBuilder;
+import wonbin.financial.service.oauth.AuthService;
+import wonbin.financial.service.oauth.JwtTokenBuilder;
 
 @RestController
 @Slf4j
