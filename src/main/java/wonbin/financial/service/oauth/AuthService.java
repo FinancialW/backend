@@ -1,4 +1,4 @@
-package wonbin.financial.service;
+package wonbin.financial.service.oauth;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -14,9 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import wonbin.financial.constant.JwtExpiration;
-import wonbin.financial.dto.AuthResultDto;
-import wonbin.financial.dto.KakaoUserDto;
-import wonbin.financial.dto.TokenDto;
+import wonbin.financial.dto.oauth.AuthResultDto;
+import wonbin.financial.dto.oauth.KakaoUserDto;
+import wonbin.financial.dto.oauth.TokenDto;
 import wonbin.financial.entity.Member;
 import wonbin.financial.repository.KakaoMemberRepository;
 

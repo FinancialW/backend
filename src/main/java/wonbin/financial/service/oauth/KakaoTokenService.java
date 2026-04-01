@@ -1,4 +1,4 @@
-package wonbin.financial.service;
+package wonbin.financial.service.oauth;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,8 +8,8 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import wonbin.financial.dto.KakaoUserDto;
-import wonbin.financial.dto.TokenDto;
+import wonbin.financial.dto.oauth.KakaoUserDto;
+import wonbin.financial.dto.oauth.TokenDto;
 
 @Service
 @RequiredArgsConstructor

@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import wonbin.financial.entity.Member;
-import wonbin.financial.service.AuthService;
-import wonbin.financial.service.WatchListService;
+import wonbin.financial.service.oauth.AuthService;
+import wonbin.financial.service.oauth.WatchListService;
 
 @RestController
 @RequiredArgsConstructor
@@ -24,7 +24,7 @@ public class WatchListController {
         return watchListService.getUserWatchListSymbols(byKakaoId.getKakaoId());
     }
 
-    @PostMapping("/watchlist/like")
+    @PostMapping("/watchlist")
     public ResponseEntity<?> likeWatchlist(Authentication authentication,
                                               @RequestParam(required = false, name="symbol") String symbol) {
         if(symbol==null || symbol.isBlank()) {
@@ -39,7 +39,7 @@ public class WatchListController {
         }
     }
 
-    @DeleteMapping("/watchlist/dislike")
+    @DeleteMapping("/watchlist")
     public ResponseEntity<?> dislikeWatchlist(Authentication authentication,
                                               @RequestParam(required = false,name="symbol") String symbol) {
         if(symbol==null || symbol.isBlank()) {
