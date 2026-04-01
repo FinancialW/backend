@@ -11,6 +11,11 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import tools.jackson.databind.ObjectMapper;
+import wonbin.financial.dto.FinnhubResponseDto;
+import wonbin.financial.dto.FinnhubResponseDto.TradeData;
+import wonbin.financial.event.FinnhubConnectedEvent;
+import wonbin.financial.event.PriceUpdateEvent;
 
 @Service
 @Slf4j
@@ -18,9 +23,11 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class FinnhubWebSocketClient {
 
     private final ApplicationEventPublisher eventPublisher; // 이벤트 발행기
+    private final ObjectMapper objectMapper;
     @Value("${FINHUB_URL}")
     private String FINNHUB_URL;
     private WebSocketSession webSocketSession; // 외부에서 메시지를 보낼 수 있는 세션 저장
+
     @PostConstruct
     public void connect() {
         try {
@@ -38,7 +45,18 @@ public class FinnhubWebSocketClient {
 
                 @Override
                 protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-                    log.info(message.getPayload());
+                    try {
+                        String payload = message.getPayload();
+                        log.info("FINNHUB DATA: {}", payload);
+                        FinnhubResponseDto finnhubResponseDto = objectMapper.readValue(payload,
+                                FinnhubResponseDto.class);
+                        if("trade".equals(finnhubResponseDto.getType()) && finnhubResponseDto.getData() != null) {
+                            TradeData lastTrade = finnhubResponseDto.getData().get(finnhubResponseDto.getData().size()-1);
+                            eventPublisher.publishEvent(new PriceUpdateEvent(lastTrade.getS(), lastTrade.getP()));
+                        }
+                    } catch (Exception e) {
+                        log.error("메시지 파싱 에러: {}", e.getMessage());
+                    }
                 }
 
                 @Override
@@ -48,7 +66,6 @@ public class FinnhubWebSocketClient {
 
                 @Override
                 public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-                    System.out.println(" 연결 종료");
                     log.info("연결 종료");
                 }
             }, FINNHUB_URL);
