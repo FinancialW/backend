@@ -27,30 +27,27 @@ public class WatchListController {
     @PostMapping("/watchlist")
     public ResponseEntity<?> likeWatchlist(Authentication authentication,
                                               @RequestParam(required = false, name="symbol") String symbol) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getName().equals("anonymousUser")) {
+            throw new RuntimeException("인증되지 않은 사용자");
+        }
+
         if(symbol==null || symbol.isBlank()) {
-            return ResponseEntity.badRequest().body("Symbol이 비어있습니다");
+            throw new IllegalArgumentException("Symbol이 비어있습니다.");
         }
-        try {
-            Member byKakaoId = authService.findByKakaoId(authentication.getName());
-            watchListService.saveMemberLike(byKakaoId,symbol);
-            return ResponseEntity.ok().build();
-        } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        Member byKakaoId = authService.findByKakaoId(authentication.getName());
+        watchListService.saveMemberLike(byKakaoId,symbol);
+        return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/watchlist")
+    @DeleteMapping("/watchlist") // refactoring 필요
     public ResponseEntity<?> dislikeWatchlist(Authentication authentication,
                                               @RequestParam(required = false,name="symbol") String symbol) {
         if(symbol==null || symbol.isBlank()) {
-            return ResponseEntity.badRequest().body("symbol이 비어있습니다");
+            throw new IllegalArgumentException("Symbol이 비어있습니다.");
         }
-        try {
-            Member byKakaoId = authService.findByKakaoId(authentication.getName());
-            watchListService.deleteMemberWatchlist(byKakaoId,symbol);
-            return ResponseEntity.ok().build();
-        } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        Member byKakaoId = authService.findByKakaoId(authentication.getName());
+        watchListService.deleteMemberWatchlist(byKakaoId, symbol);
+        return ResponseEntity.ok().build();
     }
 }

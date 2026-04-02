@@ -6,14 +6,12 @@ import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import wonbin.financial.constant.JwtExpiration;
 import wonbin.financial.dto.oauth.AuthResultDto;
 import wonbin.financial.dto.oauth.MemberDto;
@@ -33,22 +31,19 @@ public class OAuthController {
     private String testId;
     @GetMapping("/auth/me")
     public ResponseEntity<MemberDto> me(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (authentication == null || !authentication.isAuthenticated() ||
+                authentication.getName().equals("anonymousUser")) {
+            throw new IllegalArgumentException("인증되지 않은 사용자");
         }
-        try {
-            Member byKakaoId = authService.findByKakaoId(authentication.getName());
-            return ResponseEntity.ok(new MemberDto(byKakaoId.getMemberName(), byKakaoId.getId()));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        Member member = authService.findByKakaoId(authentication.getName());
+        return ResponseEntity.ok(new MemberDto(member.getMemberName(),member.getId()));
     }
 
     @GetMapping("/auth/reissue") // Cookie가 없는 경우 예외 상황 해결해야됨
     public ResponseEntity<AuthResultDto> reissue(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = authService.extractRefreshToken(request);
         if(refreshToken==null || refreshToken.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"RefreshToken 없음");
+            throw new IllegalArgumentException("RefreshToken 없음");
         }
         AuthResultDto resultDto = authService.reissue(refreshToken);
         authService.addCookies(response,resultDto);
@@ -74,14 +69,9 @@ public class OAuthController {
 
     @PostMapping("/auth/logout")
     public ResponseEntity<Void> logout(HttpServletResponse response) {
-        try {
-            authService.kakaoLogout();
-        } catch (Exception e) {
-            System.out.println("로그아웃 로직 예외 무시: " + e.getMessage());
-        } finally {
-            authService.expireCookie(response, "accessToken");
-            authService.expireCookie(response, "refreshToken");
-        }
+        authService.kakaoLogout();
+        authService.expireCookie(response,"accessToken");
+        authService.expireCookie(response,"refreshToken");
         return ResponseEntity.ok().build();
     }
 

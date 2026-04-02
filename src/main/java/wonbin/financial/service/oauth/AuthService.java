@@ -18,6 +18,7 @@ import wonbin.financial.dto.oauth.AuthResultDto;
 import wonbin.financial.dto.oauth.KakaoUserDto;
 import wonbin.financial.dto.oauth.TokenDto;
 import wonbin.financial.entity.Member;
+import wonbin.financial.exception.MemberNotFoundException;
 import wonbin.financial.repository.KakaoMemberRepository;
 
 @Service
@@ -107,7 +108,7 @@ public class AuthService {
     public void kakaoLogout() {
         String kakaoId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Member member = kakaoMemberRepository.findByKakaoId(kakaoId)
-                .orElseThrow(() -> new RuntimeException("존재하지 않는 회원입니다."));
+                .orElseThrow(MemberNotFoundException::new);
         member.setRefreshToken(null);
     }
     public void expireCookie(HttpServletResponse response, String name) {

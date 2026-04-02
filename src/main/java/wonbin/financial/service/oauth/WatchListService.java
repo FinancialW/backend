@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import wonbin.financial.entity.Member;
 import wonbin.financial.entity.WatchList;
+import wonbin.financial.exception.DuplicateWatchlistException;
 import wonbin.financial.repository.WatchListRepository;
 
 @Service
@@ -22,7 +23,7 @@ public class WatchListService {
 
     public void saveMemberLike(Member member, String symbol) {
         if(watchListRepository.existsByUserIdAndSymbol(member.getKakaoId(),symbol)) {
-            throw new IllegalStateException("이미 추가된 종목");
+            throw new DuplicateWatchlistException();
         }
         WatchList watchList = new WatchList(member.getKakaoId(), symbol);
         watchListRepository.save(watchList);

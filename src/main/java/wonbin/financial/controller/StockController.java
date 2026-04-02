@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import wonbin.financial.dto.finnhubDto.FinnhubSearchResponseDto;
+import wonbin.financial.exception.QueryEmptyException;
 import wonbin.financial.service.finnhub.SearchService;
 
 @RestController
@@ -16,7 +17,7 @@ public class StockController {
     @GetMapping("/stock/search")
     public ResponseEntity<?> search(@RequestParam(name="q") String q) {
         if(q==null || q.isBlank()) {
-            return ResponseEntity.badRequest().body("검색어가 비어있습니다.");
+            throw new QueryEmptyException();
         }
         FinnhubSearchResponseDto response = searchService.searchSymbol(q);
         return ResponseEntity.ok(response);
