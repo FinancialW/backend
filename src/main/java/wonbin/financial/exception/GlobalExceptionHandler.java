@@ -21,4 +21,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleMemberNotFoundError(MemberNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
     }
+
+    @ExceptionHandler(DuplicateWatchlistException.class)
+    public ResponseEntity<?> handleDuplicate(DuplicateWatchlistException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+    }
 }
