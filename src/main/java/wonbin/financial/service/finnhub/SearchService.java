@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import wonbin.financial.constant.KoreanStock;
 import wonbin.financial.dto.finnhubDto.FinnhubSearchResponseDto;
+import wonbin.financial.exception.SearchException;
 
 @Slf4j
 @Service
@@ -52,7 +53,7 @@ public class SearchService {
                     .body(FinnhubSearchResponseDto.class);
         } catch (Exception e) {
             log.error("검색도중에 문제 발생: {}",e.getMessage());
-            throw new RuntimeException("Finnhub 검색 api 호출 중 문제 발생");
+            throw new SearchException();
         }
     }
 }

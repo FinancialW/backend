@@ -26,4 +26,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleDuplicate(DuplicateWatchlistException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
     }
+
+    @ExceptionHandler(QueryEmptyException.class)
+    public ResponseEntity<?> handleEmptyQuery(QueryEmptyException e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
+    }
+
+    @ExceptionHandler(SearchException.class)
+    public ResponseEntity<?> handleSearch(SearchException e) {
+        return ResponseEntity.status(500).body(e.getMessage());
+    }
 }
