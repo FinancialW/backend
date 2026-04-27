@@ -1,5 +1,6 @@
 package wonbin.financial.service.candle;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -7,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import wonbin.financial.constant.Timeframe;
 import wonbin.financial.dto.candle.PivotPoint;
 import wonbin.financial.dto.candle.SupportResistanceZone;
@@ -14,7 +17,9 @@ import wonbin.financial.dto.candle.YahooCandleResponse;
 import wonbin.financial.dto.candle.YahooCandleResponse.Quote;
 import wonbin.financial.dto.candle.YahooCandleResponse.Result;
 import wonbin.financial.entity.Candle;
+import wonbin.financial.entity.SupportResistanceEntity;
 import wonbin.financial.repository.CandleRepository;
+import wonbin.financial.repository.SupportResistanceRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +28,9 @@ public class CandleService {
     private final WebClient webClient = WebClient.builder().build();
     private final CandleRepository candleRepository;
     private final SupportResistanceAnalyzer analyzer;
+    private final ObjectMapper objectMapper;
+    private final SupportResistanceRepository supportResistanceRepository;
+    private final LineService lineService;
 
     public Candle getLastestCandle(String symbol) {
         return candleRepository.findTopBySymbolOrderByTimestampDesc(symbol);
@@ -174,8 +182,42 @@ public class CandleService {
         return response;
     }
 
-    // 지금은 단기적 결과만 가지고 있음.
-    // 장기적 결과 로직 추가 필요
+    public List<SupportResistanceZone> getSupportResistanceZones(String symbol, String resolution) {
+        try {
+            SupportResistanceEntity supportEntity = supportResistanceRepository.findBySymbol(symbol)
+                    .orElse(null);
+
+            // 1. 데이터가 존재하고 && 2. 마지막 업데이트(updateAt)가 24시간 이내인지 확인
+            if (supportEntity != null && supportEntity.getZonesJson() != null && isDateFresh(supportEntity.getUpdateAt())) {
+                log.info("[{}] DB에서 24시간 이내의 유효한 지지/저항선 데이터를 불러옵니다.", symbol);
+                return objectMapper.readValue(
+                        supportEntity.getZonesJson(),
+                        new TypeReference<List<SupportResistanceZone>>() {}
+                );
+            }
+
+            log.info("[{}] DB에 데이터가 없거나 24시간이 경과하여 지지/저항선을 새로 계산합니다.", symbol);
+            List<SupportResistanceZone> calculatedZones = calculateSupportResistance(symbol, resolution);
+
+            if(!calculatedZones.isEmpty()) {
+                // 이 메서드 내부에서 엔티티가 신규 생성되거나 기존 엔티티의 updateZones()가 호출되어야 함
+                lineService.saveOrUpdate(symbol, calculatedZones);
+            }
+
+            return calculatedZones;
+        } catch (Exception e) {
+            log.error("[{}] 지지/저항선 조회/계산 중 오류 발생:{}", symbol, e.getMessage());
+            throw new RuntimeException("지지/저항선 처리 중 오류가 발생", e);
+        }
+    }
+
+    private boolean isDateFresh(LocalDateTime updateAt) {
+        if(updateAt==null) {
+            return false;
+        }
+        return updateAt.isAfter(LocalDateTime.now().minusHours(24));
+    }
+
     public List<SupportResistanceZone> calculateSupportResistance(String symbol, String resolution) {
 
         YahooCandleResponse response = getCandles(symbol, resolution);
@@ -196,7 +238,6 @@ public class CandleService {
 
         int atrPeriod = 180;
         double currentAtr = calculateATR(highs, lows, closes, atrPeriod);
-        log.info("currentATR : {}", currentAtr);
         double latestClose = getLatestValidClose(closes);
 
         // 기본 오차 범위는 일일 변동성의 절반(0.5)으로 설정
@@ -227,11 +268,9 @@ public class CandleService {
 
         int minPts = Math.max(3, (int)(filteredPivots.size() * 0.05));
 
-        // [핵심 해결책] Grid Search 방식의 Auto-Tuning 적용
         List<SupportResistanceZone> bestZones = new ArrayList<>();
 
         // 기본 Epsilon을 기준으로 비율을 조절해가며 최적의 선 개수를 찾음
-        // 순서: 100% -> 80% -> 120% -> 60% -> 150% -> 40% -> 200%
         double[] multipliers = {1.0, 0.8, 1.2, 0.6, 1.5, 0.4, 2.0};
 
         for (double multiplier : multipliers) {
@@ -245,8 +284,6 @@ public class CandleService {
             }
 
             // 목표 개수를 단번에 찾지 못했을 경우를 대비한 차선책 (안전망):
-            // 1. 아직 아무것도 못 찾았을 경우(bestZones가 비어있을 때) 우선 현재 결과를 저장 (단, 0개가 아닐 때만 유의미하지만 0개라도 일단 저장)
-            // 2. 현재 결과가 기존 최고 기록보다 개수가 많으면서, 너무 난잡하지 않을 때(8개 이하) 업데이트
             if (bestZones.isEmpty() || (currentZones.size() > bestZones.size() && currentZones.size() <= 8)) {
                 bestZones = currentZones;
             }

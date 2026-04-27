@@ -23,6 +23,6 @@ public class CandleController {
 
     @GetMapping("/support-resistance")
     public List<SupportResistanceZone> getLevels (@RequestParam(name="symbol") String symbol, @RequestParam(defaultValue = "1Y",name="resolution") String resolution) {
-        return candleService.calculateSupportResistance(symbol,resolution);
+        return candleService.getSupportResistanceZones(symbol, resolution);
     }
 }
