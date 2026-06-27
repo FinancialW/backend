@@ -1,18 +1,22 @@
 package wonbin.financial.service.candle;
 
+import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import wonbin.financial.dto.candle.SupportResistanceZone;
 import wonbin.financial.service.websocket.SubscriptionManager;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CandleBatchScheduler {
+public class Schedulerservice {
     private final CandleService candleService;
     private final SubscriptionManager subscriptionManager;
+    private final LineService lineService;
+
     @Scheduled(cron = "0 0 6 * * *", zone = "Asia/Seoul")
     public void updateDailyCandles() {
         Set<String> subscribedSymbols = subscriptionManager.getSubscribedSymbols();
@@ -38,5 +42,25 @@ public class CandleBatchScheduler {
             }
         }
         log.info("일봉 배치 업데이트 완료. 성공:{}, 실패:{}", successCount, failCount);
+    }
+
+    @Scheduled(cron = "0 15 6 * * *")
+    public void updateSupportResistance() {
+        String resolution = "1Y";
+        Set<String> subscribedSymbols = subscriptionManager.getSubscribedSymbols();
+        if(subscribedSymbols.isEmpty()) {
+            log.info("구독 중인 정보가 없어서 일부 업데이트를 건너뜁니다.");
+            return;
+        }
+        log.info("새벽 6시 15분: 총 {}개 종목의 지지선/저항성 업데이트 배치를 시작합니다.",subscribedSymbols.size());
+        for(String symbol : subscribedSymbols) {
+            try {
+                List<SupportResistanceZone> zones = candleService.calculateSupportResistance(symbol,
+                        resolution);
+                lineService.saveOrUpdate(symbol,zones);
+            } catch (Exception e) {
+                log.error("[{}] 지지/저항선 업데이트 중 오류 발생: {}",symbol, e.getMessage());
+            }
+        }
     }
 }

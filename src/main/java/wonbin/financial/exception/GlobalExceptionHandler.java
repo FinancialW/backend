@@ -36,4 +36,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleSearch(SearchException e) {
         return ResponseEntity.status(500).body(e.getMessage());
     }
+
+    @ExceptionHandler(ResistanceLineException.class)
+    public ResponseEntity<?> handleResistanceError(ResistanceLineException e) {
+        return ResponseEntity.status(500).body(e.getMessage());
+    }
 }
