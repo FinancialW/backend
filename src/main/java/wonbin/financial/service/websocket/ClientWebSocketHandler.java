@@ -16,6 +16,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import wonbin.financial.event.PriceUpdateEvent;
+import wonbin.financial.service.finnhub.QuoteService;
 
 @Service
 @RequiredArgsConstructor
@@ -23,8 +24,10 @@ import wonbin.financial.event.PriceUpdateEvent;
 public class ClientWebSocketHandler extends TextWebSocketHandler {
     private final SubscriptionManager subscriptionManager;
     private final ObjectMapper objectMapper;
+    private final QuoteService quoteService;
     private final Map<String, WebSocketSession> activateSessions = new ConcurrentHashMap<>(); // 활성화된 세션 모두 가져옴
     private final Map<String, Set<WebSocketSession>> symbolToSessions = new ConcurrentHashMap<>();
+    private final Map<String, Double> lastKnownPrice = new ConcurrentHashMap<>(); // 심볼별 최신 체결가 캐시
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         activateSessions.put(session.getId(), session);
@@ -45,11 +48,16 @@ public class ClientWebSocketHandler extends TextWebSocketHandler {
                 }
                 subscriptionManager.onUserLogin(session.getId(), symbols);
                 log.info("연결 성공, 세션 ID : {}", session.getId());
+                // 진입 즉시 현재가 스냅샷 전송 (마감 시 직전 거래일 종가)
+                for (String symbol : symbols) {
+                    sendSnapshot(session, symbol);
+                }
 
             } else if ("ADD".equals(type)) {
                 String symbol = jsonNode.get("symbol").asString();
                 subscriptionManager.addSymbol(session.getId(), symbol);
                 symbolToSessions.computeIfAbsent(symbol, k -> ConcurrentHashMap.newKeySet()).add(session);
+                sendSnapshot(session, symbol);
 
             } else if ("REMOVE".equals(type)) {
                 String symbol = jsonNode.get("symbol").asString();
@@ -79,6 +87,7 @@ public class ClientWebSocketHandler extends TextWebSocketHandler {
     public void handlePriceUpdate(PriceUpdateEvent event) {
         String symbol = event.getSymbol();
         log.info("FINNHUB DATA:{}", symbol);
+        lastKnownPrice.put(symbol, event.getPrice()); // 최신 체결가 캐시 갱신
         Set<WebSocketSession> sessions = symbolToSessions.get(symbol);
 
         if (sessions != null && !sessions.isEmpty()) {
@@ -96,6 +105,27 @@ public class ClientWebSocketHandler extends TextWebSocketHandler {
                     }
                 }
             }
+        }
+    }
+
+    // 진입/추가 시 해당 세션에만 현재가 스냅샷을 1회 전송.
+    // 장중 최신 체결가(lastKnownPrice) → 없으면 Finnhub /quote(현재가/직전 종가) → DB 일봉 종가 순.
+    private void sendSnapshot(WebSocketSession session, String symbol) {
+        Double price = lastKnownPrice.get(symbol);
+        if (price == null) {
+            price = quoteService.getLatestPrice(symbol);
+        }
+        if (price == null || !session.isOpen()) {
+            return;
+        }
+        String payload = String.format(
+                "{\"type\":\"PRICE\",\"symbol\":\"%s\",\"price\":%s}",
+                symbol, price
+        );
+        try {
+            session.sendMessage(new TextMessage(payload));
+        } catch (Exception e) {
+            log.error("스냅샷 전송 에러: {}", e.getMessage());
         }
     }
 }

@@ -13,6 +13,8 @@ import wonbin.financial.entity.Candle;
 public interface CandleRepository extends JpaRepository<Candle,Long> {
     List<Candle> findBySymbolAndTimeframeOrderByTimestampAsc(String symbol, Timeframe timeframe);
     Candle findTopBySymbolOrderByTimestampDesc(String symbol);
+    // 특정 봉 타입의 최신 캔들 (예: 최신 일봉 종가 조회용)
+    Candle findTopBySymbolAndTimeframeOrderByTimestampDesc(String symbol, Timeframe timeframe);
 
     List<Candle> timeframe(Timeframe timeframe);
     // 특정 종목(symbol)과 봉 타입(timeframe)에 해당하는 모든 timestamp만 Set으로 조회
