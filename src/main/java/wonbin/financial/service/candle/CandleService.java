@@ -22,6 +22,17 @@ public class CandleService {
     public Candle getLastestCandle(String symbol) {
         return candleRepository.findTopBySymbolOrderByTimestampDesc(symbol);
     }
+
+    // 최신 일봉 종가. 일봉이 없으면 timeframe 무관 최신 캔들로 폴백.
+    public Double getLatestDailyClose(String symbol) {
+        Candle daily = candleRepository.findTopBySymbolAndTimeframeOrderByTimestampDesc(symbol,
+                Timeframe.DAY);
+        if (daily != null) {
+            return daily.getClose();
+        }
+        Candle latest = candleRepository.findTopBySymbolOrderByTimestampDesc(symbol);
+        return latest != null ? latest.getClose() : null;
+    }
     public YahooCandleResponse getCandles(
             String symbol,
             String resolution
