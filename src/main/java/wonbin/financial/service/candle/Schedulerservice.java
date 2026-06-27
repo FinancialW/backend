@@ -1,12 +1,10 @@
 package wonbin.financial.service.candle;
 
-import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import wonbin.financial.dto.candle.SupportResistanceZone;
 import wonbin.financial.service.websocket.SubscriptionManager;
 
 @Slf4j
@@ -15,7 +13,7 @@ import wonbin.financial.service.websocket.SubscriptionManager;
 public class Schedulerservice {
     private final CandleService candleService;
     private final SubscriptionManager subscriptionManager;
-    private final LineService lineService;
+    private final LevelAnalysisService levelAnalysisService;
 
     @Scheduled(cron = "0 0 6 * * *", zone = "Asia/Seoul")
     public void updateDailyCandles() {
@@ -55,9 +53,7 @@ public class Schedulerservice {
         log.info("새벽 6시 15분: 총 {}개 종목의 지지선/저항성 업데이트 배치를 시작합니다.",subscribedSymbols.size());
         for(String symbol : subscribedSymbols) {
             try {
-                List<SupportResistanceZone> zones = candleService.calculateSupportResistance(symbol,
-                        resolution);
-                lineService.saveOrUpdate(symbol,zones);
+                levelAnalysisService.refresh(symbol, resolution);
             } catch (Exception e) {
                 log.error("[{}] 지지/저항선 업데이트 중 오류 발생: {}",symbol, e.getMessage());
             }

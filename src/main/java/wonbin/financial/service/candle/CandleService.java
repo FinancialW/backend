@@ -1,6 +1,5 @@
 package wonbin.financial.service.candle;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -8,18 +7,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 import wonbin.financial.constant.Timeframe;
-import wonbin.financial.dto.candle.PivotPoint;
-import wonbin.financial.dto.candle.SupportResistanceZone;
 import wonbin.financial.dto.candle.YahooCandleResponse;
 import wonbin.financial.dto.candle.YahooCandleResponse.Quote;
 import wonbin.financial.dto.candle.YahooCandleResponse.Result;
 import wonbin.financial.entity.Candle;
-import wonbin.financial.entity.SupportResistanceEntity;
 import wonbin.financial.repository.CandleRepository;
-import wonbin.financial.repository.SupportResistanceRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -27,10 +20,6 @@ import wonbin.financial.repository.SupportResistanceRepository;
 public class CandleService {
     private final WebClient webClient = WebClient.builder().build();
     private final CandleRepository candleRepository;
-    private final SupportResistanceAnalyzer analyzer;
-    private final ObjectMapper objectMapper;
-    private final SupportResistanceRepository supportResistanceRepository;
-    private final LineService lineService;
 
     public Candle getLastestCandle(String symbol) {
         return candleRepository.findTopBySymbolOrderByTimestampDesc(symbol);
@@ -46,6 +35,7 @@ public class CandleService {
         Candle latest = candleRepository.findTopBySymbolOrderByTimestampDesc(symbol);
         return latest != null ? latest.getClose() : null;
     }
+
     public YahooCandleResponse getCandles(
             String symbol,
             String resolution
@@ -191,168 +181,6 @@ public class CandleService {
         response.setChart(chart);
 
         return response;
-    }
-
-    public List<SupportResistanceZone> getSupportResistanceZones(String symbol, String resolution) {
-        try {
-            SupportResistanceEntity supportEntity = supportResistanceRepository.findBySymbol(symbol)
-                    .orElse(null);
-
-            // 1. 데이터가 존재하고 && 2. 마지막 업데이트(updateAt)가 24시간 이내인지 확인
-            if (supportEntity != null && supportEntity.getZonesJson() != null && isDateFresh(supportEntity.getUpdateAt())) {
-                log.info("[{}] DB에서 24시간 이내의 유효한 지지/저항선 데이터를 불러옵니다.", symbol);
-                return objectMapper.readValue(
-                        supportEntity.getZonesJson(),
-                        new TypeReference<List<SupportResistanceZone>>() {}
-                );
-            }
-
-            log.info("[{}] DB에 데이터가 없거나 24시간이 경과하여 지지/저항선을 새로 계산합니다.", symbol);
-            List<SupportResistanceZone> calculatedZones = calculateSupportResistance(symbol, resolution);
-
-            if(!calculatedZones.isEmpty()) {
-                // 이 메서드 내부에서 엔티티가 신규 생성되거나 기존 엔티티의 updateZones()가 호출되어야 함
-                lineService.saveOrUpdate(symbol, calculatedZones);
-            }
-
-            return calculatedZones;
-        } catch (Exception e) {
-            log.error("[{}] 지지/저항선 조회/계산 중 오류 발생:{}", symbol, e.getMessage());
-            throw new RuntimeException("지지/저항선 처리 중 오류가 발생", e);
-        }
-    }
-
-    private boolean isDateFresh(LocalDateTime updateAt) {
-        if(updateAt==null) {
-            return false;
-        }
-        return updateAt.isAfter(LocalDateTime.now().minusHours(24));
-    }
-
-    public List<SupportResistanceZone> calculateSupportResistance(String symbol, String resolution) {
-
-        YahooCandleResponse response = getCandles(symbol, resolution);
-
-        // 데이터 파싱 전 방어 로직
-        if (response == null || response.getChart().getResult() == null || response.getChart().getResult().isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        Quote quote = response.getChart().getResult().get(0).getIndicators().getQuote().get(0);
-        List<Double> highs = quote.getHigh();
-        List<Double> lows = quote.getLow();
-        List<Double> closes = quote.getClose();
-
-        if (highs == null || lows == null || closes == null || highs.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        int atrPeriod = 180;
-        double currentAtr = calculateATR(highs, lows, closes, atrPeriod);
-        double latestClose = getLatestValidClose(closes);
-
-        // 기본 오차 범위는 일일 변동성의 절반(0.5)으로 설정
-        double epsilon = (currentAtr > 0) ? (currentAtr * 0.5) : (latestClose * 0.02);
-
-        // [핵심 해결책 1] Epsilon의 하한선을 낮춰 저변동성 종목(애플 등) 방어
-        double minEpsilon = latestClose * 0.005; // 1.5% -> 0.5%로 대폭 하향
-        double maxEpsilon = latestClose * 0.04;  // 상한선은 4.0%로 유지
-
-        // epsilon 값을 minEpsilon과 maxEpsilon 사이로 강제 고정
-        epsilon = Math.max(minEpsilon, Math.min(epsilon, maxEpsilon));
-
-        // 3. Pivot 추출
-        int windowSize = 3;
-        List<PivotPoint> pivots = analyzer.extract(highs, lows, windowSize);
-
-        double thresholdRatio = 0.30;
-        double upperBound = latestClose * (1.0 + thresholdRatio);
-        double lowerBound = latestClose * (1.0 - thresholdRatio);
-
-        List<PivotPoint> filteredPivots = new ArrayList<>();
-        for(PivotPoint p : pivots) {
-            double pivotPrice = p.getPrice();
-            if(pivotPrice >= lowerBound && pivotPrice <=upperBound) {
-                filteredPivots.add(p);
-            }
-        }
-
-        int minPts = Math.max(3, (int)(filteredPivots.size() * 0.05));
-
-        List<SupportResistanceZone> bestZones = new ArrayList<>();
-
-        // 기본 Epsilon을 기준으로 비율을 조절해가며 최적의 선 개수를 찾음
-        double[] multipliers = {1.0, 0.8, 1.2, 0.6, 1.5, 0.4, 2.0};
-
-        for (double multiplier : multipliers) {
-            double testEpsilon = epsilon * multiplier;
-            List<SupportResistanceZone> currentZones = analyzer.clusterPivotsAsZone(filteredPivots, testEpsilon, minPts);
-
-            // 3~6개 사이의 이상적인 개수가 나오면 즉시 채택하고 루프 종료
-            if (currentZones.size() >= 3 && currentZones.size() <= 6) {
-                bestZones = currentZones;
-                break;
-            }
-
-            // 목표 개수를 단번에 찾지 못했을 경우를 대비한 차선책 (안전망):
-            if (bestZones.isEmpty() || (currentZones.size() > bestZones.size() && currentZones.size() <= 8)) {
-                bestZones = currentZones;
-            }
-        }
-
-        List<SupportResistanceZone> zones = bestZones;
-
-        // 6. 결과 정렬 및 개수 제한
-        // 터치 횟수(touchCount)가 많은, 즉 신뢰도가 높은 지지/저항선부터 내림차순 정렬
-        zones.sort((z1, z2) -> Integer.compare(z2.getTouchCount(), z1.getTouchCount()));
-
-        // 그래도 선이 6개를 초과한다면 가장 신뢰도 높은 상위 6개만 반환
-        if (zones.size() > 6) {
-            zones = new ArrayList<>(zones.subList(0, 6));
-        }
-
-        return zones;
-    }
-
-    // 가격 변동성(ATR - 평균 진폭)을 확인하는 메서드
-    public double calculateATR(List<Double> highs, List<Double> lows, List<Double> closes, int period) {
-
-        if (highs.size() < period + 1) return 0.0;
-
-        double sumTrueRange = 0;
-        int count = 0;
-
-        // 가장 최근 period 만큼만 반복하여 평균을 냄
-        for (int i = highs.size() - period; i < highs.size(); i++) {
-            if (highs.get(i) == null || lows.get(i) == null || closes.get(i - 1) == null) continue;
-
-            double high = highs.get(i);
-            double low = lows.get(i);
-            double prevClose = closes.get(i - 1);
-
-            // True Range(TR) 계산: 다음 3가지 중 가장 큰 값
-            // 1. 당일 고가 - 당일 저가
-            // 2. |당일 고가 - 전일 종가|
-            // 3. |당일 저가 - 전일 종가|
-            double tr1 = high - low;
-            double tr2 = Math.abs(high - prevClose);
-            double tr3 = Math.abs(low - prevClose);
-
-            double trueRange = Math.max(tr1, Math.max(tr2, tr3));
-            sumTrueRange += trueRange;
-            count++;
-        }
-
-        return count > 0 ? sumTrueRange / count : 0.0;
-    }
-
-    private double getLatestValidClose(List<Double> closes) {
-        for (int i = closes.size() - 1; i >= 0; i--) {
-            if (closes.get(i) != null) {
-                return closes.get(i);
-            }
-        }
-        return 0.0;
     }
 
     public String convertInterval(String resolution) {
