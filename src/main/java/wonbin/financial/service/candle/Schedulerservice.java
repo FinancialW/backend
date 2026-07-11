@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import wonbin.financial.service.notification.PatternNotificationService;
 import wonbin.financial.service.websocket.SubscriptionManager;
 
 @Slf4j
@@ -14,6 +15,7 @@ public class Schedulerservice {
     private final CandleService candleService;
     private final SubscriptionManager subscriptionManager;
     private final LevelAnalysisService levelAnalysisService;
+    private final PatternNotificationService patternNotificationService;
 
     @Scheduled(cron = "0 0 6 * * *", zone = "Asia/Seoul")
     public void updateDailyCandles() {
@@ -58,5 +60,11 @@ public class Schedulerservice {
                 log.error("[{}] 지지/저항선 업데이트 중 오류 발생: {}",symbol, e.getMessage());
             }
         }
+    }
+
+    // 06:00 일봉 갱신 → 06:15 지지/저항 → 06:30 패턴 탐지 순서로, 갱신된 일봉 캐시를 사용한다
+    @Scheduled(cron = "0 30 6 * * *", zone = "Asia/Seoul")
+    public void detectChartPatterns() {
+        patternNotificationService.detectAndNotifyAll();
     }
 }

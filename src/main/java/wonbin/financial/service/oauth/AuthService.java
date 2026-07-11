@@ -6,6 +6,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,10 @@ public class AuthService {
         KakaoUserDto userInfo =
                 kakaoTokenService.getUserInfo(kakaoToken.getAccess_token());
         Member member = kakaoLoginService.loginService(userInfo);
+        // 카카오톡 메시지 발송용으로 카카오 토큰을 보관(saveRefreshToken에서 함께 저장됨)
+        member.setKakaoAccessToken(kakaoToken.getAccess_token());
+        member.setKakaoRefreshToken(kakaoToken.getRefresh_token());
+        member.setKakaoTokenExpiresAt(LocalDateTime.now().plusSeconds(kakaoToken.getExpires_in()));
         String accessToken =
                 jwtTokenBuilder.tokenCreator(member.getKakaoId(), JwtExpiration.ACCESS_TOKEN_MS.getMilliseconds());
         String refreshToken =
