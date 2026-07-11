@@ -3,6 +3,8 @@ package wonbin.financial.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +29,10 @@ public class OAuthController {
     private final JwtTokenBuilder jwtTokenBuilder;
     @Value("${kakao.client.id}")
     private String kakaoClientId;
+    @Value("${kakao.redirect-uri}")
+    private String kakaoRedirectUri;
+    @Value("${app.mobile-deeplink-url}")
+    private String mobileDeeplinkUrl;
     @Value("${jwt.test.id}")
     private String testId;
     @GetMapping("/auth/me")
@@ -51,18 +57,37 @@ public class OAuthController {
     }
 
     @GetMapping("/auth/kakao") // 카카오 로그인화면 이동 버튼
-    public void redirectToKakao(HttpServletResponse response) throws IOException {
+    public void redirectToKakao(@RequestParam(value = "client", required = false) String client,
+                                HttpServletResponse response) throws IOException {
+        // redirect_uri는 토큰 교환(KakaoTokenService)과 반드시 같아야 하므로 프로퍼티로 일원화
         String url = "https://kauth.kakao.com/oauth/authorize"
                 + "?client_id="+kakaoClientId
-                + "&redirect_uri=http://192.168.0.33:8080/auth/kakao/callback"
-                + "&response_type=code";
+                + "&redirect_uri="+kakaoRedirectUri
+                + "&response_type=code"
+                // talk_message: 패턴 감지 카카오톡 알림용(개발자 콘솔 동의항목 활성화 필요)
+                // account_email은 비즈 앱 인증이 필요해 제외 — 이메일은 동의 없이는 null로 온다
+                + "&scope=talk_message,profile_nickname";
+        // 앱(Expo)에서 시작한 로그인은 state로 표시해두면 카카오가 콜백까지 그대로 전달해준다
+        if ("app".equals(client)) {
+            url += "&state=app";
+        }
 
         response.sendRedirect(url);
     }
     @GetMapping("/auth/kakao/callback")
     public void callback(@RequestParam("code") String code,
+                         @RequestParam(value = "state", required = false) String state,
                          HttpServletResponse response) throws IOException {
         AuthResultDto result = authService.kakaoLogin(code);
+        if ("app".equals(state)) {
+            // 네이티브 앱은 쿠키를 못 쓰므로 딥링크 쿼리로 토큰을 전달한다.
+            // 앱은 SecureStore에 저장 후 Authorization: Bearer 헤더로 사용(JwtAuthenticationFilter가 지원).
+            String deepLink = mobileDeeplinkUrl
+                    + "?accessToken=" + URLEncoder.encode(result.getAccessToken(), StandardCharsets.UTF_8)
+                    + "&refreshToken=" + URLEncoder.encode(result.getRefreshToken(), StandardCharsets.UTF_8);
+            response.sendRedirect(deepLink);
+            return;
+        }
         authService.addCookies(response,result);
         response.sendRedirect("http://192.168.0.33:5173/login-success");
     }

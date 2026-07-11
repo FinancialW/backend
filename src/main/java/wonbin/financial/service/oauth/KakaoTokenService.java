@@ -1,6 +1,7 @@
 package wonbin.financial.service.oauth;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import wonbin.financial.dto.oauth.KakaoUserDto;
 import wonbin.financial.dto.oauth.TokenDto;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class KakaoTokenService {
     private final WebClient webClient = WebClient.builder().build();
@@ -47,6 +49,31 @@ public class KakaoTokenService {
                 .block();
     }
 
+
+    /** 카카오 refresh 토큰으로 access 토큰 갱신. 실패(만료/폐기) 시 4xx가 RuntimeException으로 전파된다. */
+    public TokenDto refreshAccessToken(String refreshToken) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("grant_type", "refresh_token");
+        params.add("client_id", clientId);
+        params.add("refresh_token", refreshToken);
+        params.add("client_secret", secretKey);
+
+        return webClient.post()
+                .uri("https://kauth.kakao.com/oauth/token")
+                .header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded;charset=utf-8")
+                .body(BodyInserters.fromFormData(params))
+                .retrieve()
+                .onStatus(
+                        status -> status.is4xxClientError(),
+                        response -> response.bodyToMono(String.class)
+                                .map(body -> {
+                                    log.error("카카오 토큰 갱신 실패: {}", body);
+                                    return new RuntimeException(body);
+                                })
+                )
+                .bodyToMono(TokenDto.class)
+                .block();
+    }
 
     public KakaoUserDto getUserInfo(String accessToken) {
         return webClient.get()

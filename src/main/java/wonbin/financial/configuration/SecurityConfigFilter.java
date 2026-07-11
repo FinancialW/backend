@@ -26,7 +26,8 @@ public class SecurityConfigFilter {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**", "/login", "/error","/test/token").permitAll()
+                        .requestMatchers("/auth/**", "/login", "/error","/test/token",
+                                "/test/patterns/run").permitAll() // patterns/run은 개발용, 배포 전 제거
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exception -> exception
