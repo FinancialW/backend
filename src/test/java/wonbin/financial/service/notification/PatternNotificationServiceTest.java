@@ -54,6 +54,7 @@ class PatternNotificationServiceTest {
     @Mock KakaoMemberRepository kakaoMemberRepository;
     @Mock KakaoTokenManager kakaoTokenManager;
     @Mock KakaoMessageService kakaoMessageService;
+    @Mock PatternChartRenderer chartRenderer;
 
     private PatternNotificationService service;
 
@@ -73,7 +74,7 @@ class PatternNotificationServiceTest {
     void setUp() {
         service = new PatternNotificationService(candleService, analyzer, zigZagFilter,
                 List.of(detector), detectedPatternRepository, watchListRepository,
-                kakaoMemberRepository, kakaoTokenManager, kakaoMessageService);
+                kakaoMemberRepository, kakaoTokenManager, kakaoMessageService, chartRenderer);
         ReflectionTestUtils.setField(service, "frontBaseUrl", "http://localhost:5173");
 
         when(candleService.getCandles(eq("AAPL"), anyString())).thenReturn(candleResponse(30));
@@ -158,6 +159,52 @@ class PatternNotificationServiceTest {
 
         service.detectForSymbol("AAPL", false);
 
+        verify(kakaoMessageService, times(1)).sendToMe(eq("token"), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("차트 렌더링·업로드 성공 시 feed 템플릿으로 발송하고 업로드는 1회만 수행한다")
+    void chartUploadedOnceAndFeedSent() {
+        when(detectedPatternRepository.existsBySymbolAndPatternTypeAndKeyPivotTimestampBetween(
+                anyString(), any(), anyLong(), anyLong())).thenReturn(false);
+        when(detectedPatternRepository.save(any(DetectedPatternEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(watchListRepository.findBySymbol("AAPL"))
+                .thenReturn(List.of(new WatchList("1", "AAPL"), new WatchList("2", "AAPL")));
+        when(kakaoMemberRepository.findByKakaoId("1")).thenReturn(Optional.of(memberWithKakaoId("1")));
+        when(kakaoMemberRepository.findByKakaoId("2")).thenReturn(Optional.of(memberWithKakaoId("2")));
+        when(kakaoTokenManager.getValidAccessToken(any())).thenReturn(Optional.of("token"));
+        when(chartRenderer.render(any(), any(PatternContext.class))).thenReturn(new byte[]{1, 2, 3});
+        when(kakaoMessageService.uploadImage(eq("token"), any(byte[].class), anyString()))
+                .thenReturn("http://k.kakaocdn.net/chart.png");
+
+        service.detectForSymbol("AAPL", false);
+
+        verify(kakaoMessageService, times(1)).uploadImage(eq("token"), any(byte[].class), anyString());
+        verify(kakaoMessageService, times(2)).sendFeedToMe(eq("token"), anyString(), anyString(),
+                eq("http://k.kakaocdn.net/chart.png"), anyString());
+        verify(kakaoMessageService, never()).sendToMe(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("차트 업로드 실패 시 텍스트 알림으로 대체한다")
+    void uploadFailureFallsBackToText() {
+        when(detectedPatternRepository.existsBySymbolAndPatternTypeAndKeyPivotTimestampBetween(
+                anyString(), any(), anyLong(), anyLong())).thenReturn(false);
+        when(detectedPatternRepository.save(any(DetectedPatternEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(watchListRepository.findBySymbol("AAPL"))
+                .thenReturn(List.of(new WatchList("1", "AAPL")));
+        when(kakaoMemberRepository.findByKakaoId("1")).thenReturn(Optional.of(memberWithKakaoId("1")));
+        when(kakaoTokenManager.getValidAccessToken(any())).thenReturn(Optional.of("token"));
+        when(chartRenderer.render(any(), any(PatternContext.class))).thenReturn(new byte[]{1, 2, 3});
+        when(kakaoMessageService.uploadImage(eq("token"), any(byte[].class), anyString()))
+                .thenThrow(new RuntimeException("업로드 실패"));
+
+        service.detectForSymbol("AAPL", false);
+
+        verify(kakaoMessageService, never()).sendFeedToMe(anyString(), anyString(), anyString(),
+                anyString(), anyString());
         verify(kakaoMessageService, times(1)).sendToMe(eq("token"), anyString(), anyString());
     }
 

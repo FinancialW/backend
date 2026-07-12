@@ -2,7 +2,9 @@ package wonbin.financial.controller;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,5 +30,13 @@ public class PatternController {
         }
         patternNotificationService.detectAndNotifyAll();
         return ResponseEntity.ok("전체 패턴 탐지 배치 완료");
+    }
+
+    /** 개발용: 탐지된 패턴의 알림 차트 이미지를 브라우저에서 미리 확인한다(발송 없음). 패턴 미탐지 시 404. */
+    @GetMapping("/test/patterns/chart")
+    public ResponseEntity<byte[]> chart(@RequestParam String symbol) {
+        return patternNotificationService.renderChartForSymbol(symbol)
+                .map(png -> ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(png))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

@@ -3,6 +3,8 @@ package wonbin.financial.service.notification;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +52,7 @@ public class PatternNotificationService {
     private final KakaoMemberRepository kakaoMemberRepository;
     private final KakaoTokenManager kakaoTokenManager;
     private final KakaoMessageService kakaoMessageService;
+    private final PatternChartRenderer chartRenderer;
 
     @Value("${app.front-base-url}")
     private String frontBaseUrl;
@@ -121,7 +124,7 @@ public class PatternNotificationService {
                             .invalidationPrice(dto.getInvalidationPrice())
                             .breakoutTimestamp(dto.getBreakoutTimestamp())
                             .build());
-            notifyWatchers(dto);
+            notifyWatchers(dto, ctx);
             entity.markNotified();
             detectedPatternRepository.save(entity);
             fresh.add(dto);
@@ -174,6 +177,9 @@ public class PatternNotificationService {
         return PatternContext.builder()
                 .symbol(symbol)
                 .swings(swings)
+                .opens(quote.getOpen())
+                .highs(highs)
+                .lows(lows)
                 .closes(closes)
                 .timestamps(timestamps)
                 .atr(atr)
@@ -182,13 +188,25 @@ public class PatternNotificationService {
                 .build();
     }
 
-    /** 해당 심볼을 관심종목에 담은 모든 사용자에게 발송. 실패한 사용자는 건너뛰고 계속한다. */
-    private void notifyWatchers(DetectedPatternDto dto) {
+    /**
+     * 해당 심볼을 관심종목에 담은 모든 사용자에게 발송. 실패한 사용자는 건너뛰고 계속한다.
+     * 차트 이미지는 심볼당 1회만 렌더링/업로드하고(카카오 CDN URL은 사용자 간 공유 가능),
+     * 렌더링·업로드가 실패하면 기존 텍스트 알림으로 대체한다.
+     */
+    private void notifyWatchers(DetectedPatternDto dto, PatternContext ctx) {
         List<WatchList> watchers = watchListRepository.findBySymbol(dto.getSymbol());
         if (watchers.isEmpty()) {
             return;
         }
-        String text = buildMessage(dto);
+        byte[] chartPng = null;
+        try {
+            chartPng = chartRenderer.render(dto, ctx);
+        } catch (Exception e) {
+            log.warn("[{}] 차트 렌더링 실패, 텍스트 알림으로 대체합니다: {}", dto.getSymbol(), e.getMessage());
+        }
+        byte[] png = chartPng;
+        AtomicReference<String> imageUrl = new AtomicReference<>();
+
         int sent = 0;
         for (WatchList watcher : watchers) {
             Member member = kakaoMemberRepository.findByKakaoId(watcher.getUserId()).orElse(null);
@@ -200,7 +218,7 @@ public class PatternNotificationService {
                 continue;
             }
             try {
-                sendWithRetry(member, token.get(), text);
+                sendWithRetry(member, token.get(), accessToken -> deliver(accessToken, dto, png, imageUrl));
                 sent++;
             } catch (Exception e) {
                 log.warn("[{}] {} 사용자 알림 발송 실패: {}", dto.getSymbol(), member.getKakaoId(),
@@ -211,23 +229,63 @@ public class PatternNotificationService {
                 dto.getPatternType().getKoreanName(), sent, watchers.size());
     }
 
-    /** 401(토큰 만료)이면 갱신 후 정확히 1회만 재시도한다. */
-    private void sendWithRetry(Member member, String accessToken, String text) {
-        try {
-            kakaoMessageService.sendToMe(accessToken, text, frontBaseUrl);
-        } catch (KakaoUnauthorizedException e) {
-            String refreshed = kakaoTokenManager.refreshAndStore(member)
-                    .orElseThrow(() -> new RuntimeException("카카오 토큰 갱신 실패"));
-            kakaoMessageService.sendToMe(refreshed, text, frontBaseUrl);
+    /** 이미지가 준비되면 feed 템플릿, 아니면 텍스트 템플릿으로 발송한다. 업로드는 최초 1회만 시도된다. */
+    private void deliver(String accessToken, DetectedPatternDto dto, byte[] chartPng,
+                         AtomicReference<String> imageUrl) {
+        if (chartPng != null && imageUrl.get() == null) {
+            try {
+                imageUrl.set(kakaoMessageService.uploadImage(
+                        accessToken, chartPng, dto.getSymbol() + "_pattern.png"));
+            } catch (KakaoUnauthorizedException e) {
+                throw e; // 토큰 갱신 후 재시도 대상
+            } catch (Exception e) {
+                log.warn("[{}] 차트 업로드 실패, 텍스트 알림으로 대체합니다: {}", dto.getSymbol(), e.getMessage());
+            }
+        }
+        if (imageUrl.get() != null) {
+            kakaoMessageService.sendFeedToMe(accessToken, buildTitle(dto), buildDescription(dto),
+                    imageUrl.get(), frontBaseUrl);
+        } else {
+            kakaoMessageService.sendToMe(accessToken, buildTitle(dto) + "\n" + buildDescription(dto),
+                    frontBaseUrl);
         }
     }
 
-    private String buildMessage(DetectedPatternDto dto) {
+    /** 401(토큰 만료)이면 갱신 후 정확히 1회만 재시도한다. */
+    private void sendWithRetry(Member member, String accessToken, Consumer<String> delivery) {
+        try {
+            delivery.accept(accessToken);
+        } catch (KakaoUnauthorizedException e) {
+            String refreshed = kakaoTokenManager.refreshAndStore(member)
+                    .orElseThrow(() -> new RuntimeException("카카오 토큰 갱신 실패"));
+            delivery.accept(refreshed);
+        }
+    }
+
+    private String buildTitle(DetectedPatternDto dto) {
         PatternType type = dto.getPatternType();
         String direction = type.isBullish() ? "상승 반전" : "하락 반전";
-        String breakLabel = type.isBullish() ? "넥라인 돌파" : "넥라인 이탈";
-        return String.format("[패턴 감지] %s%n%s (%s)%n%s: $%.2f%n측정 목표가: $%.2f%n무효화 기준: $%.2f%n※ 투자 조언이 아닙니다.",
-                dto.getSymbol(), type.getKoreanName(), direction, breakLabel,
-                dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
+        return String.format("[패턴 감지] %s · %s (%s)", dto.getSymbol(), type.getKoreanName(), direction);
+    }
+
+    private String buildDescription(DetectedPatternDto dto) {
+        String breakLabel = dto.getPatternType().isBullish() ? "넥라인 돌파" : "넥라인 이탈";
+        return String.format("%s: $%.2f%n측정 목표가: $%.2f%n무효화 기준: $%.2f%n※ 투자 조언이 아닙니다.",
+                breakLabel, dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
+    }
+
+    /** 개발용: 심볼에서 처음 탐지되는 패턴의 차트 PNG를 렌더링한다(저장/발송 없음). */
+    public Optional<byte[]> renderChartForSymbol(String symbol) {
+        PatternContext ctx = buildContext(symbol);
+        if (ctx == null) {
+            return Optional.empty();
+        }
+        for (PatternDetector detector : detectors) {
+            Optional<DetectedPatternDto> detection = detector.detect(ctx);
+            if (detection.isPresent()) {
+                return Optional.of(chartRenderer.render(detection.get(), ctx));
+            }
+        }
+        return Optional.empty();
     }
 }

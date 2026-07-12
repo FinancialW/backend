@@ -14,6 +14,9 @@ import wonbin.financial.dto.candle.PivotPoint;
 public class PatternContext {
     private final String symbol;
     private final List<PivotPoint> swings;   // ZigZag 정제 완료(HIGH/LOW 교대)
+    private final List<Double> opens;        // 차트 렌더링용(탐지에는 미사용, null 가능)
+    private final List<Double> highs;
+    private final List<Double> lows;
     private final List<Double> closes;
     private final List<Long> timestamps;
     private final double atr;
