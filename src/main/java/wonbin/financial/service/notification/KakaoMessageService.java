@@ -73,7 +73,8 @@ public class KakaoMessageService {
      */
     public String uploadImage(String accessToken, byte[] image, String filename) {
         MultipartBodyBuilder body = new MultipartBodyBuilder();
-        body.part("image", new ByteArrayResource(image) {
+        // 카카오 문서와 달리 실제 API는 multipart 필드명으로 "file"을 요구한다 ("image"는 -2 에러)
+        body.part("file", new ByteArrayResource(image) {
             @Override
             public String getFilename() {
                 return filename;
