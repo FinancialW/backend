@@ -9,7 +9,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,11 @@ public class AuthService {
     private final KakaoLoginService kakaoLoginService;
     private final JwtTokenBuilder jwtTokenBuilder;
     private final KakaoMemberRepository kakaoMemberRepository;
+
+    // 운영(true): Vercel 프런트와 백엔드가 서로 다른 사이트라 SameSite=None; Secure 필수
+    // 로컬(false): http 환경이라 Secure 불가 → Lax
+    @Value("${app.cookie-secure:false}")
+    private boolean cookieSecure;
 
     public void saveRefreshToken(Member member, String refreshToken) {
         member.setRefreshToken(refreshToken);
@@ -58,18 +66,20 @@ public class AuthService {
         return new AuthResultDto(accessToken, refreshToken);
     }
     public void addCookies(HttpServletResponse response, AuthResultDto result) {
-        Cookie accessCookie = new Cookie("accessToken", result.getAccessToken());
-        accessCookie.setHttpOnly(true);
-        accessCookie.setPath("/");
-        accessCookie.setMaxAge(JwtExpiration.ACCESS_COOKIE.getSeconds());
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                buildCookie("accessToken", result.getAccessToken(), JwtExpiration.ACCESS_COOKIE.getSeconds()).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                buildCookie("refreshToken", result.getRefreshToken(), JwtExpiration.REFRESH_TOKEN_DAYS.getSeconds()).toString());
+    }
 
-        Cookie refreshCookie = new Cookie("refreshToken", result.getRefreshToken());
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setPath("/");
-        refreshCookie.setMaxAge(JwtExpiration.REFRESH_TOKEN_DAYS.getSeconds());
-
-        response.addCookie(accessCookie);
-        response.addCookie(refreshCookie);
+    private ResponseCookie buildCookie(String name, String value, long maxAgeSeconds) {
+        return ResponseCookie.from(name, value)
+                .httpOnly(true)
+                .path("/")
+                .maxAge(maxAgeSeconds)
+                .secure(cookieSecure)
+                .sameSite(cookieSecure ? "None" : "Lax")
+                .build();
     }
 
     public String extractRefreshToken(HttpServletRequest request) {
@@ -117,10 +127,6 @@ public class AuthService {
         member.setRefreshToken(null);
     }
     public void expireCookie(HttpServletResponse response, String name) {
-        Cookie cookie = new Cookie(name, null);
-        cookie.setMaxAge(0);
-        cookie.setPath("/");
-        cookie.setHttpOnly(true);
-        response.addCookie(cookie);
+        response.addHeader(HttpHeaders.SET_COOKIE, buildCookie(name, "", 0).toString());
     }
     }
