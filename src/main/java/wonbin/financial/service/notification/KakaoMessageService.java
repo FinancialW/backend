@@ -50,9 +50,9 @@ public class KakaoMessageService {
     /** 차트 이미지가 포함된 feed 템플릿 메시지. 이미지 URL은 외부에서 접근 가능해야 한다(uploadImage 결과 사용). */
     public void sendFeedToMe(String accessToken, String title, String description,
                              String imageUrl, String linkUrl) {
+        // 메시지 링크는 앱에 등록된 도메인만 열리므로(카카오 CDN 등 외부 도메인은 무시됨)
+        // 이미지 탭도 버튼과 동일하게 프론트로 보낸다. 확대 보기는 프론트 차트 화면이 담당.
         Map<String, Object> link = Map.of("web_url", linkUrl, "mobile_web_url", linkUrl);
-        // 카카오톡 feed는 자체 이미지 확대가 없어서, 이미지 탭 시 원본 PNG를 열어 확대할 수 있게 한다
-        Map<String, Object> imageLink = Map.of("web_url", imageUrl, "mobile_web_url", imageUrl);
         Map<String, Object> template = Map.of(
                 "object_type", "feed",
                 "content", Map.of(
@@ -61,7 +61,7 @@ public class KakaoMessageService {
                         "image_url", imageUrl,
                         "image_width", PatternChartRenderer.WIDTH,
                         "image_height", PatternChartRenderer.HEIGHT,
-                        "link", imageLink),
+                        "link", link),
                 "buttons", List.of(Map.of("title", "차트 보기", "link", link))
         );
         sendTemplate(accessToken, template);
