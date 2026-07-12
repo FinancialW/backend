@@ -4,6 +4,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,6 +31,17 @@ public class PatternController {
         }
         patternNotificationService.detectAndNotifyAll();
         return ResponseEntity.ok("전체 패턴 탐지 배치 완료");
+    }
+
+    /**
+     * 개발용: 로그인한 사용자 본인에게 샘플 패턴 알림을 실제 발송한다(탐지/저장 없음).
+     * 인증 필요 — /test/token으로 받은 JWT를 Bearer 헤더나 accessToken 쿠키로 전달.
+     */
+    @PostMapping("/test/patterns/send-sample")
+    public ResponseEntity<String> sendSample(@RequestParam(defaultValue = "TSLA") String symbol,
+                                             Authentication authentication) {
+        return ResponseEntity.ok(
+                patternNotificationService.sendSampleToUser(authentication.getName(), symbol));
     }
 
     /** 개발용: 탐지된 패턴의 알림 차트 이미지를 브라우저에서 미리 확인한다(발송 없음). 패턴 미탐지 시 404. */

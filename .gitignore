@@ -356,3 +356,5 @@ gradle-app.setting
 *.hprof
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,git,java,maven,eclipse,intellij,gradle,netbeans,visualstudiocode
+# 인프라 식별자(IP·계정ID·키 경로)가 포함된 내부 문서 — 공개 리포에 올리지 않는다
+docs/deploy-troubleshooting.md

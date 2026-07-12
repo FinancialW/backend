@@ -19,6 +19,7 @@ import wonbin.financial.entity.DetectedPatternEntity;
 import wonbin.financial.entity.Member;
 import wonbin.financial.entity.WatchList;
 import wonbin.financial.exception.KakaoUnauthorizedException;
+import wonbin.financial.exception.MemberNotFoundException;
 import wonbin.financial.repository.DetectedPatternRepository;
 import wonbin.financial.repository.KakaoMemberRepository;
 import wonbin.financial.repository.WatchListRepository;
@@ -272,6 +273,62 @@ public class PatternNotificationService {
         String breakLabel = dto.getPatternType().isBullish() ? "넥라인 돌파" : "넥라인 이탈";
         return String.format("%s: $%.2f%n측정 목표가: $%.2f%n무효화 기준: $%.2f%n※ 투자 조언이 아닙니다.",
                 breakLabel, dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
+    }
+
+    /**
+     * 개발용: 실제 봉 데이터 위에 샘플 패턴 값을 얹어 본인에게 알림을 발송한다(탐지/저장 없음).
+     * 운영 발송 경로(deliver/sendWithRetry: 차트 렌더링 → 카카오 업로드 → feed 발송)를 그대로 검증한다.
+     */
+    public String sendSampleToUser(String kakaoId, String symbol) {
+        Member member = kakaoMemberRepository.findByKakaoId(kakaoId)
+                .orElseThrow(MemberNotFoundException::new);
+        Optional<String> token = kakaoTokenManager.getValidAccessToken(member);
+        if (token.isEmpty()) {
+            return "카카오 토큰이 없습니다. 사이트에서 카카오 로그인(talk_message 동의) 후 다시 시도하세요.";
+        }
+        PatternContext ctx = buildContext(symbol);
+        if (ctx == null) {
+            return "봉 데이터를 불러오지 못했습니다: " + symbol;
+        }
+        DetectedPatternDto dto = buildSampleDto(ctx);
+        byte[] png = null;
+        try {
+            png = chartRenderer.render(dto, ctx);
+        } catch (Exception e) {
+            log.warn("[{}] (샘플) 차트 렌더링 실패, 텍스트 알림으로 대체합니다: {}", symbol, e.getMessage());
+        }
+        byte[] chartPng = png;
+        AtomicReference<String> imageUrl = new AtomicReference<>();
+        sendWithRetry(member, token.get(), accessToken -> deliver(accessToken, dto, chartPng, imageUrl));
+        return imageUrl.get() != null ? "샘플 알림 발송 완료(차트 이미지 포함)" : "샘플 알림 발송 완료(텍스트만)";
+    }
+
+    /** 기간 내 최저점을 이중 바닥의 결정적 극점으로 가정한 그럴듯한 샘플 패턴 값을 만든다. */
+    private DetectedPatternDto buildSampleDto(PatternContext ctx) {
+        List<Double> lows = ctx.getLows();
+        List<Long> timestamps = ctx.getTimestamps();
+        int size = Math.min(lows.size(), timestamps.size());
+        double minLow = ctx.getCurrentPrice();
+        int minIdx = size - 1;
+        for (int i = 0; i < size; i++) {
+            Double low = lows.get(i);
+            if (low != null && low < minLow) {
+                minLow = low;
+                minIdx = i;
+            }
+        }
+        double neckline = ctx.getCurrentPrice();
+        return DetectedPatternDto.builder()
+                .symbol(ctx.getSymbol())
+                .patternType(PatternType.DOUBLE_BOTTOM)
+                .necklinePrice(neckline)
+                .targetPrice(neckline + (neckline - minLow))
+                .invalidationPrice(minLow)
+                .patternExtremePrice(minLow)
+                .breakoutClose(ctx.getCurrentPrice())
+                .breakoutTimestamp(timestamps.get(size - 1))
+                .keyPivotTimestamp(timestamps.get(minIdx))
+                .build();
     }
 
     /** 개발용: 심볼에서 처음 탐지되는 패턴의 차트 PNG를 렌더링한다(저장/발송 없음). */
