@@ -47,12 +47,21 @@ public class KakaoMessageService {
         sendTemplate(accessToken, template);
     }
 
-    /** 차트 이미지가 포함된 feed 템플릿 메시지. 이미지 URL은 외부에서 접근 가능해야 한다(uploadImage 결과 사용). */
+    /**
+     * 차트 이미지가 포함된 feed 템플릿 메시지. 이미지 URL은 외부에서 접근 가능해야 한다(uploadImage 결과 사용).
+     *
+     * @param items 카드 하단에 "이름  값" 행으로 표시할 항목(순서 유지, 최대 5개 — 카카오 제한).
+     *              feed description은 줄수 제한으로 잘리므로 가격 정보는 여기로 보낸다.
+     */
     public void sendFeedToMe(String accessToken, String title, String description,
-                             String imageUrl, String linkUrl) {
+                             String imageUrl, String linkUrl, Map<String, String> items) {
         // 메시지 링크는 앱에 등록된 도메인만 열리므로(카카오 CDN 등 외부 도메인은 무시됨)
         // 이미지 탭도 버튼과 동일하게 프론트로 보낸다. 확대 보기는 프론트 차트 화면이 담당.
         Map<String, Object> link = Map.of("web_url", linkUrl, "mobile_web_url", linkUrl);
+        List<Map<String, String>> itemRows = items.entrySet().stream()
+                .limit(5)
+                .map(e -> Map.of("item", e.getKey(), "item_op", e.getValue()))
+                .toList();
         Map<String, Object> template = Map.of(
                 "object_type", "feed",
                 "content", Map.of(
@@ -62,6 +71,7 @@ public class KakaoMessageService {
                         "image_width", PatternChartRenderer.WIDTH,
                         "image_height", PatternChartRenderer.HEIGHT,
                         "link", link),
+                "item_content", Map.of("items", itemRows),
                 "buttons", List.of(Map.of("title", "차트 보기", "link", link))
         );
         sendTemplate(accessToken, template);
