@@ -1,0 +1,68 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # GitHub OIDC로 AWS 역할을 임시로 가져온다 (액세스 키 불필요)
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPO: financialw-be
+  INSTANCE_ID: i-018744c7ea447bd26
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # application.properties는 gitignore라 CI에는 없다.
+      # 런타임 설정은 EC2의 /etc/financialw/config 마운트로 주입되므로 테스트 없이 빌드만 한다.
+      - name: Build jar
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::756829763078:role/gha-financialw-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }}
+          docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
+          docker push --all-tags $IMAGE
+
+      - name: Deploy on EC2 (SSM)
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids ${{ env.INSTANCE_ID }} \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${{ github.sha }}" \
+            --parameters 'commands=["sudo /usr/local/bin/deploy-financialw.sh"]' \
+            --query 'Command.CommandId' --output text)
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id ${{ env.INSTANCE_ID }} || true
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id ${{ env.INSTANCE_ID }} \
+            --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' --output json | tee result.json
+          test "$(jq -r .Status result.json)" = "Success"
+
+      - name: Health check
+        run: |
+          sleep 20
+          curl -sf https://www.financialw.kro.kr/test/token > /dev/null
+          echo "배포 완료: 서비스 정상 응답"
