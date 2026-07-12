@@ -1,8 +1,10 @@
 package wonbin.financial.service.notification;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import wonbin.financial.constant.PatternType;
+import wonbin.financial.constant.TopSymbols;
 import wonbin.financial.dto.candle.PivotPoint;
 import wonbin.financial.dto.candle.YahooCandleResponse;
 import wonbin.financial.dto.candle.YahooCandleResponse.Quote;
@@ -17,7 +20,6 @@ import wonbin.financial.dto.candle.YahooCandleResponse.Result;
 import wonbin.financial.dto.candle.pattern.DetectedPatternDto;
 import wonbin.financial.entity.DetectedPatternEntity;
 import wonbin.financial.entity.Member;
-import wonbin.financial.entity.WatchList;
 import wonbin.financial.exception.KakaoUnauthorizedException;
 import wonbin.financial.exception.MemberNotFoundException;
 import wonbin.financial.repository.DetectedPatternRepository;
@@ -58,13 +60,10 @@ public class PatternNotificationService {
     @Value("${app.front-base-url}")
     private String frontBaseUrl;
 
-    /** 배치 진입점: 관심종목에 등록된 모든 심볼을 순회한다. */
+    /** 배치 진입점: 대형주 상위 50 유니버스 + 관심종목 심볼의 합집합을 순회한다. */
     public void detectAndNotifyAll() {
-        List<String> symbols = watchListRepository.findDistinctSymbols();
-        if (symbols.isEmpty()) {
-            log.info("관심종목이 없어 패턴 탐지를 건너뜁니다.");
-            return;
-        }
+        Set<String> symbols = new LinkedHashSet<>(TopSymbols.TOP_50);
+        symbols.addAll(watchListRepository.findDistinctSymbols());
         log.info("차트 패턴 탐지 배치 시작. 대상 심볼:{}", symbols.size());
         int successCount = 0;
         int failCount = 0;
@@ -190,13 +189,13 @@ public class PatternNotificationService {
     }
 
     /**
-     * 해당 심볼을 관심종목에 담은 모든 사용자에게 발송. 실패한 사용자는 건너뛰고 계속한다.
-     * 차트 이미지는 심볼당 1회만 렌더링/업로드하고(카카오 CDN URL은 사용자 간 공유 가능),
-     * 렌더링·업로드가 실패하면 기존 텍스트 알림으로 대체한다.
+     * 카카오 토큰이 있는 모든 회원에게 발송(스캔 유니버스가 관심종목보다 넓어져 전체 공지 방식).
+     * 실패한 사용자는 건너뛰고 계속한다. 차트 이미지는 심볼당 1회만 렌더링/업로드하고
+     * (카카오 CDN URL은 사용자 간 공유 가능), 렌더링·업로드가 실패하면 텍스트 알림으로 대체한다.
      */
     private void notifyWatchers(DetectedPatternDto dto, PatternContext ctx) {
-        List<WatchList> watchers = watchListRepository.findBySymbol(dto.getSymbol());
-        if (watchers.isEmpty()) {
+        List<Member> members = kakaoMemberRepository.findAll();
+        if (members.isEmpty()) {
             return;
         }
         byte[] chartPng = null;
@@ -209,11 +208,7 @@ public class PatternNotificationService {
         AtomicReference<String> imageUrl = new AtomicReference<>();
 
         int sent = 0;
-        for (WatchList watcher : watchers) {
-            Member member = kakaoMemberRepository.findByKakaoId(watcher.getUserId()).orElse(null);
-            if (member == null) {
-                continue;
-            }
+        for (Member member : members) {
             Optional<String> token = kakaoTokenManager.getValidAccessToken(member);
             if (token.isEmpty()) {
                 continue;
@@ -227,7 +222,7 @@ public class PatternNotificationService {
             }
         }
         log.info("[{}] {} 알림 발송 완료: {}/{}명", dto.getSymbol(),
-                dto.getPatternType().getKoreanName(), sent, watchers.size());
+                dto.getPatternType().getKoreanName(), sent, members.size());
     }
 
     /** 이미지가 준비되면 feed 템플릿, 아니면 텍스트 템플릿으로 발송한다. 업로드는 최초 1회만 시도된다. */
