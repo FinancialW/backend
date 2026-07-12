@@ -19,6 +19,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 네이티브 앱(Expo)은 Origin 헤더를 보내지 않아 목록과 무관하게 허용된다
         registry.addHandler(clientWebSocketHandler, "/ws")
                 .setAllowedOrigins(
+                        "https://app.financialw.kro.kr",
                         "https://financialwfe.vercel.app",
                         "http://localhost:5173",
                         "http://192.168.0.33:5173",
