@@ -51,6 +51,8 @@ public class KakaoMessageService {
     public void sendFeedToMe(String accessToken, String title, String description,
                              String imageUrl, String linkUrl) {
         Map<String, Object> link = Map.of("web_url", linkUrl, "mobile_web_url", linkUrl);
+        // 카카오톡 feed는 자체 이미지 확대가 없어서, 이미지 탭 시 원본 PNG를 열어 확대할 수 있게 한다
+        Map<String, Object> imageLink = Map.of("web_url", imageUrl, "mobile_web_url", imageUrl);
         Map<String, Object> template = Map.of(
                 "object_type", "feed",
                 "content", Map.of(
@@ -59,7 +61,7 @@ public class KakaoMessageService {
                         "image_url", imageUrl,
                         "image_width", PatternChartRenderer.WIDTH,
                         "image_height", PatternChartRenderer.HEIGHT,
-                        "link", link),
+                        "link", imageLink),
                 "buttons", List.of(Map.of("title", "차트 보기", "link", link))
         );
         sendTemplate(accessToken, template);

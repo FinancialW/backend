@@ -270,9 +270,18 @@ public class PatternNotificationService {
     }
 
     private String buildDescription(DetectedPatternDto dto) {
-        String breakLabel = dto.getPatternType().isBullish() ? "넥라인 돌파" : "넥라인 이탈";
-        return String.format("%s: $%.2f%n측정 목표가: $%.2f%n무효화 기준: $%.2f%n※ 투자 조언이 아닙니다.",
-                breakLabel, dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
+        if (dto.getPatternType().isBullish()) {
+            return String.format(
+                    "주가가 패턴의 경계선(넥라인) $%.2f를 위로 뚫었어요.%n"
+                            + "패턴 높이만큼 오른다면 $%.2f 부근까지 상승 여력이 있어요.%n"
+                            + "반대로 $%.2f 아래로 내려가면 이 신호는 무효로 봐요.",
+                    dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
+        }
+        return String.format(
+                "주가가 패턴의 경계선(넥라인) $%.2f를 아래로 이탈했어요.%n"
+                        + "패턴 높이만큼 내린다면 $%.2f 부근까지 하락할 수 있어요.%n"
+                        + "반대로 $%.2f 위로 올라가면 이 신호는 무효로 봐요.",
+                dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
     }
 
     /**
