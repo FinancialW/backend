@@ -269,18 +269,13 @@ public class PatternNotificationService {
         return String.format("[패턴 감지] %s · %s (%s)", dto.getSymbol(), type.getKoreanName(), direction);
     }
 
+    /** feed description은 표시 줄수 제한으로 잘리므로 핵심만 2줄로 압축한다. */
     private String buildDescription(DetectedPatternDto dto) {
         if (dto.getPatternType().isBullish()) {
-            return String.format(
-                    "주가가 패턴의 경계선(넥라인) $%.2f를 위로 뚫었어요.%n"
-                            + "패턴 높이만큼 오른다면 $%.2f 부근까지 상승 여력이 있어요.%n"
-                            + "반대로 $%.2f 아래로 내려가면 이 신호는 무효로 봐요.",
+            return String.format("경계선(넥라인) $%.2f 위로 돌파, 목표가 $%.2f%n$%.2f 밑으로 가면 신호 무효",
                     dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
         }
-        return String.format(
-                "주가가 패턴의 경계선(넥라인) $%.2f를 아래로 이탈했어요.%n"
-                        + "패턴 높이만큼 내린다면 $%.2f 부근까지 하락할 수 있어요.%n"
-                        + "반대로 $%.2f 위로 올라가면 이 신호는 무효로 봐요.",
+        return String.format("경계선(넥라인) $%.2f 아래로 이탈, 목표가 $%.2f%n$%.2f 위로 가면 신호 무효",
                 dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
     }
 
