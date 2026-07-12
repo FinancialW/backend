@@ -33,6 +33,8 @@ public class OAuthController {
     private String kakaoRedirectUri;
     @Value("${app.mobile-deeplink-url}")
     private String mobileDeeplinkUrl;
+    @Value("${app.front-base-url}")
+    private String frontBaseUrl;
     @Value("${jwt.test.id}")
     private String testId;
     @GetMapping("/auth/me")
@@ -89,7 +91,7 @@ public class OAuthController {
             return;
         }
         authService.addCookies(response,result);
-        response.sendRedirect("http://192.168.0.33:5173/login-success");
+        response.sendRedirect(frontBaseUrl + "/login-success");
     }
 
     @PostMapping("/auth/logout")
