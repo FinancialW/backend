@@ -1,8 +1,10 @@
 package wonbin.financial.service.notification;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -240,9 +242,9 @@ public class PatternNotificationService {
         }
         if (imageUrl.get() != null) {
             kakaoMessageService.sendFeedToMe(accessToken, buildTitle(dto), buildDescription(dto),
-                    imageUrl.get(), frontBaseUrl);
+                    imageUrl.get(), frontBaseUrl, buildItems(dto));
         } else {
-            kakaoMessageService.sendToMe(accessToken, buildTitle(dto) + "\n" + buildDescription(dto),
+            kakaoMessageService.sendToMe(accessToken, buildTitle(dto) + "\n" + buildTextBody(dto),
                     frontBaseUrl);
         }
     }
@@ -264,8 +266,24 @@ public class PatternNotificationService {
         return String.format("[패턴 감지] %s · %s (%s)", dto.getSymbol(), type.getKoreanName(), direction);
     }
 
-    /** feed description은 표시 줄수 제한으로 잘리므로 핵심만 2줄로 압축한다. */
+    /** feed description은 줄수 제한으로 잘리므로 한 줄 요약만 쓰고, 가격은 item 행(buildItems)으로 보낸다. */
     private String buildDescription(DetectedPatternDto dto) {
+        return dto.getPatternType().isBullish()
+                ? "주가가 패턴 경계선(넥라인)을 위로 뚫었어요. 무효화 가격 아래로 가면 신호는 취소돼요."
+                : "주가가 패턴 경계선(넥라인)을 아래로 이탈했어요. 무효화 가격 위로 가면 신호는 취소돼요.";
+    }
+
+    /** 카드 하단에 "이름  값" 행으로 표시되는 가격 정보(잘림 없음, 순서 유지). */
+    private Map<String, String> buildItems(DetectedPatternDto dto) {
+        Map<String, String> items = new LinkedHashMap<>();
+        items.put("넥라인", String.format("$%.2f", dto.getNecklinePrice()));
+        items.put("목표가", String.format("$%.2f", dto.getTargetPrice()));
+        items.put("무효화 가격", String.format("$%.2f", dto.getInvalidationPrice()));
+        return items;
+    }
+
+    /** 이미지 업로드 실패 시 텍스트 템플릿 대체용 본문(텍스트는 잘리지 않으므로 가격 포함). */
+    private String buildTextBody(DetectedPatternDto dto) {
         if (dto.getPatternType().isBullish()) {
             return String.format("경계선(넥라인) $%.2f 위로 돌파, 목표가 $%.2f%n$%.2f 밑으로 가면 신호 무효",
                     dto.getNecklinePrice(), dto.getTargetPrice(), dto.getInvalidationPrice());
