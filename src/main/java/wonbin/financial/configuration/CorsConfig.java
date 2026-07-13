@@ -15,6 +15,7 @@ public class CorsConfig {
 
         config.setAllowedOrigins(List.of(
                 "https://app.financialw.kro.kr",
+                "https://www.financialw.kro.kr",
                 "https://financialwfe.vercel.app",
                 "http://localhost:5173",
                 "http://192.168.0.33:5173",
